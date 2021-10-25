@@ -1,53 +1,42 @@
-const express = require('express');
 const cors = require('cors');
-const PORT = 5000;
+const express = require('express');
 const app = express();
 app.use(cors());
-app.use(express.json());
-
-const server = require('http').Server(app);
-const io = require('socket.io')(server, {
+const http = require('http');
+const server = http.createServer(app);
+const { Server } = require("socket.io");
+const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
-    methods: ["GET", "POST"]
+    origin: ['http://localhost:3000'],
   }
 });
-// Works as db (just for the tutorial)
-const rooms = new Map();222
 
-app.get('/', (req, res, _next) => {
-  res.send('works');
-});
-
-app.post('/rooms', (req, res, _next) => {
-  const { userName, roomId } = req.body; 
-  if (!rooms.has(roomId)) {
-    rooms.set(roomId, new Map([
-      ['users', new Map()],
-      ['messages', []]
-    ]))
-  }
-  res.send('rooms');
-})
+const rooms = {}
 
 io.on('connection', (socket) => {
-  socket.on('room joined', ({ roomId, userName }) => {
-    socket.join(roomId)
-    // saving data to db
-    rooms.get(roomId).get('users').set(socket.id, userName);
-    const users = [...rooms.get(roomId).get('users').values()];
-    io.in(roomId).emit('room joined', users);
-  });
+  socket.emit('HAND_SHAKE')
 
-  socket.on('disconnect', () => {
-    rooms.forEach((room, roomId) => {
-      if(room.get('users').delete(socket.id)) { // returns true if .delete success
-        const users = [...room.get('users').values()];
-        socket.broadcast.to(roomId).emit('room leaved', users);
+  socket.on('SET_USERS', ({ room, name }) => {
+    socket.join(room);
+    if (!rooms[room]) {
+      rooms[room] = {
+        users: [{
+          id: socket.id,
+          name,
+        }]
       }
-    });
-  });
-})
+    } else {
+      rooms[room].users.push({
+        id: socket.id,
+        name,
+      });
+    }
+    const users = rooms[room].users.map(u => u.name);
+    socket.emit('SET_USERS', { room, users });
+    console.log(users);
+  })
+});
 
-
-server.listen(PORT, () => console.log(`Running on http://localhost:${PORT}`));
+server.listen(5000, () => {
+  console.log('listening on 5000');
+});
