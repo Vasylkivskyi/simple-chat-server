@@ -1,3 +1,5 @@
+const { v4: uuidv4 } = require('uuid');
+const moment = require('moment');
 const cors = require('cors');
 const express = require('express');
 const app = express();
@@ -11,7 +13,8 @@ const io = new Server(server, {
   }
 });
 
-const rooms = {}
+const rooms = {};
+const imagesBaseUrl = 'https://robohash.org';
 
 io.on('connection', (socket) => {
   socket.emit('HAND_SHAKE')
@@ -20,6 +23,7 @@ io.on('connection', (socket) => {
     socket.join(room);
     if (!rooms[room]) {
       rooms[room] = {
+        messages: [],
         users: [{
           id: socket.id,
           name,
@@ -31,10 +35,25 @@ io.on('connection', (socket) => {
         name,
       });
     }
-    const users = rooms[room].users.map(u => u.name);
-    socket.emit('SET_USERS', { room, users });
-    console.log(users);
-  })
+    io.to(room).emit('SET_USERS', { room, users: rooms[room].users });
+  });
+  socket.on('SET_MESSAGES', ({ room, text, name }) => {
+    rooms[room].messages.push({
+      id: uuidv4(),
+      author: name,
+      text,
+      image: `${imagesBaseUrl}/${name}`,
+      time: moment().format('h:mm a'),
+    });
+    io.to(room).emit('SET_MESSAGES', rooms[room].messages);
+  });
+  socket.on('disconnect', function () {
+    Object.keys(rooms).forEach((room) => {
+      const newUsers = rooms[room]?.users.filter((user) => user.id !== socket.id);
+      rooms[room].users = [...newUsers];
+      socket.broadcast.to(room).emit('SET_USERS', { room, users: rooms[room].users });
+    });
+});
 });
 
 server.listen(5000, () => {
